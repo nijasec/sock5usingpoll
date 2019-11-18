@@ -28,6 +28,7 @@
 
 #include <chrono>
 
+#include <netdb.h> 
 #include <poll.h>
 
 #define BUFSIZE 65536
@@ -387,7 +388,7 @@ class HandleClient {
   }
   bool getClientCommand(int client) {
     bool flag = false;
-    char DST_Addr[255];
+    char DST_Addr[256];
     char IP[8];
     char DST_Port[2];
     int addr_Len, n;
@@ -406,17 +407,27 @@ class HandleClient {
     int remotesocket = 0;
     addr_Len = ADDR_Size[ATYP];
     DST_Addr[0] = getByte(client);
-    outs("get addre");
+    //outs("get addre");
     if (ATYP == 0x03) {
       addr_Len = DST_Addr[0] + 1;
+      //outs("DOMAIN");
+      
     }
-    for (int i = 1; i < addr_Len; i++) {
+    int i;
+    char buff[256];
+    memset( & buff, 0, sizeof(buff));
+    for (i = 1; i < addr_Len; i++) {
       DST_Addr[i] = getByte(client);
+      buff[i-1]=DST_Addr[i];
+    //  printf("%c",DST_Addr[i]);
+      
+      
     }
-    outs("addr copied");
+    
+
     DST_Port[0] = getByte(client);
     DST_Port[1] = getByte(client);
-    outs("port copied ");
+   // outs("port copied ");
     if (SOCKS_Version != 0x05) {
 
       refuseCommand(client, 0xFF);
@@ -435,17 +446,18 @@ class HandleClient {
       refuseCommand(client, 0x08);
       return false;
     }
-    calculateIP(client, IP, DST_Addr);
+  if(ATYP!=0x03)
+        calculateIP(client, IP, DST_Addr,ATYP);
+        else
+            calculateIP(client, IP, buff,ATYP);
+    
     if (socksCommand == 0x03) {
       outs("its a udp req");
 
       createUDP(IP, calcPort(DST_Port[0], DST_Port[1]));
 
     }
-    //  createUDP(IP,33);
-    //cout<< "caluclate ip"<<std::endl;
 
-    //cout <<"port:"<<calcPort(DST_Port[0],DST_Port[1])<<std::endl;
     remotesocket = connectToServer(IP, calcPort(DST_Port[0], DST_Port[1]));
     if (remotesocket > 0) {
       // cout<<"Remote socket connected"<<endl;
@@ -469,11 +481,13 @@ class HandleClient {
     return false;
 
   }
+  
+  
   bool createUDP(char * ip, int port) {
     int udpsockfd, remoteudpsock;
     char buffer[2048];
     int len;
-    const char * data_sent = "its a dummy data to get port";
+   
     struct sockaddr_in servaddr, remoteaddr, foo;
 
     // Creating socket file descriptor 
@@ -509,7 +523,7 @@ class HandleClient {
       int st=sendto(udpsockfd, data_sent, sizeof(data_sent), 0,
                  (struct sockaddr*)&to, sizeof(to));*/
       i++;
-      printf("randome number:=%d ", number);
+      //printf("randome number:=%d ", number);
 
       // Bind the socket with the server address 
       if (bind(udpsockfd, (const struct sockaddr * ) & servaddr,
@@ -528,6 +542,7 @@ class HandleClient {
   int connectToServer(char * ip, int port) {
     int sock;
     char * p;
+   // outs(ip);
     struct sockaddr_in serv_addr;
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
       printf("\n Socket creation error \n");
@@ -536,7 +551,7 @@ class HandleClient {
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
-    printf("port=%d", port);
+    //printf("port=%d", port);
     //outs(p);
 
     // Convert IPv4 and IPv6 addresses from text to binary form 
@@ -553,7 +568,7 @@ class HandleClient {
     } catch (char * msg) {
       cout << "error";
     }
-    cout << "connected" << endl;
+    //cout << "connected" << endl;
     return sock;
 
   }
@@ -566,14 +581,40 @@ class HandleClient {
 
     return ((byte2int(Hi) << 8) | byte2int(Lo));
   }
-  void calculateIP(int client, char * p, char * addr) {
+ void calculateIP(int client, char * p, char * addr,int type) {
+      
+      
     int i;
+    struct hostent *host_entry; 
+    char *hostbuffer; 
+    
+    
+    if(type==DOMAIN)
+    {
+    
+     host_entry=   gethostbyname(addr);
+     if(host_entry==NULL)
+         outs("host entry null");
+         else
+    hostbuffer=inet_ntoa(*((struct in_addr*) 
+                           host_entry->h_addr_list[0])); 
+                           
+         
+                    sprintf(p,"%s",hostbuffer);
+                           
+     // outs(p);
+// return p;
+        
+    }else
+    {
     try {
       sprintf(p, "%d.%d.%d.%d", byte2int(addr[0]), byte2int(addr[1]), byte2int(addr[2]), byte2int(addr[3]));
-      std::cout << "IP:" << p;
+     // std::cout << "IP:" << p;
     } catch (char * m) {
       std::cout << "error calucip" << endl;
     }
+    }
+    
   }
 
   void refuseCommand(int socket, char code) {
